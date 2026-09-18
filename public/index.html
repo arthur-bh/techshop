@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel TechShop - Validação Google</title>
+    <!-- Script Oficial de Login do Google -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f6f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        .btn { padding: 6px 12px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-update { background-color: #28a745; color: white; }
+        .btn-delete { background-color: #dc3545; color: white; }
+        .seletor-acesso { padding: 15px; background-color: #e2e3e5; border-radius: 5px; display: flex; align-items: center; justify-content: space-between; }
+        .user-info { font-weight: bold; color: #28a745; }
+    </style>
+</head>
+<body>
+    <h1>Gerenciamento de Dados TechShop</h1>
+
+    <!-- Seção de Login do Google e Simulação de Nível -->
+    <div class="card seletor-acesso">
+        <div>
+            <h3>Autenticação Google</h3>
+            <div id="g_id_onload"
+                data-client_id="SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+                data-callback="handleCredentialResponse">
+            </div>
+            <div class="g_id_signin" data-type="standard"></div>
+            <p id="googleStatus" class="user-info"></p>
+        </div>
+
+        <div>
+            <label for="nivelAcesso">Nível de Permissão: </label>
+            <select id="nivelAcesso">
+                <option value="Client">Cliente (Apenas Visualização)</option>
+                <option value="Admin">Administrador (Acesso Total)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Tabelas -->
+    <div class="card">
+        <h2>Relatório de Vendas</h2>
+        <button class="btn btn-update" onclick="carregarVendas()">Atualizar Relatório</button>
+        <table id="tabelaVendas">
+            <thead>
+                <tr><th>ID Pedido</th><th>Cliente</th><th>Total Pedido</th><th>Status</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Controle de Estoque</h2>
+        <table id="tabelaEstoque">
+            <thead>
+                <tr><th>Produto</th><th>Estoque Atual</th><th>Total Vendido</th><th>Ação</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Gestão de Clientes</h2>
+        <table id="tabelaClientes">
+            <thead>
+                <tr><th>ID</th><th>Nome</th><th>Email</th><th>Ação</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        let tokenGoogle = '';
+
+        // Callback executado ao fazer login pelo Google
+        function handleCredentialResponse(response) {
+            tokenGoogle = response.credential;
+            
+            // Decodifica o payload do Token JWT para exibir dados do usuário
+            const base64Url = tokenGoogle.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(window.atob(base64));
+
+            document.getElementById('googleStatus').innerText = `Autenticado como: ${payload.name} (${payload.email})`;
+        }
+
+        function obterNivelAcesso() {
+            return document.getElementById('nivelAcesso').value;
+        }
+
+        function obterHeaders() {
+            const headers = {
+                'Content-Type': 'application/json',
+                'user-level': obterNivelAcesso()
+            };
+            if (tokenGoogle) {
+                headers['Authorization'] = `Bearer ${tokenGoogle}`;
+            }
+            return headers;
+        }
+
+        async function carregarVendas() {
+            const resposta = await fetch('/api/relatorio-vendas');
+            const dados = await resposta.json();
+            const tbody = document.querySelector('#tabelaVendas tbody');
+            tbody.innerHTML = '';
+            dados.forEach(venda => {
+                tbody.innerHTML += `<tr><td>${venda.id_pedido}</td><td>${venda.nome_cliente}</td><td>R$ ${parseFloat(venda.total_pedido).toFixed(2)}</td><td>${venda.status_pedido}</td></tr>`;
+            });
+        }
+
+        async function carregarEstoque() {
+            const resposta = await fetch('/api/estoque');
+            const dados = await resposta.json();
+            const tbody = document.querySelector('#tabelaEstoque tbody');
+            tbody.innerHTML = '';
+            dados.forEach(item => {
+                tbody.innerHTML += `<tr><td>${item.nome_produto}</td><td><input type="number" id="est-${item.id_produto}" value="${item.estoque_atual}" style="width:60px;"></td><td>${item.total_unidades_vendidas} und</td><td><button class="btn btn-update" onclick="alterarEstoque(${item.id_produto})">Salvar</button></td></tr>`;
+            });
+        }
+
+        async function carregarClientes() {
+            const resposta = await fetch('/api/clientes');
+            const dados = await resposta.json();
+            const tbody = document.querySelector('#tabelaClientes tbody');
+            tbody.innerHTML = '';
+            dados.forEach(cliente => {
+                tbody.innerHTML += `<tr><td>${cliente.id_cliente}</td><td>${cliente.nome}</td><td>${cliente.email}</td><td><button class="btn btn-delete" onclick="deletarCliente(${cliente.id_cliente})">Excluir</button></td></tr>`;
+            });
+        }
+
+        async function alterarEstoque(idProduto) {
+            const novoEstoque = document.getElementById(`est-${idProduto}`).value;
+            const resposta = await fetch(`/api/produtos/${idProduto}`, {
+                method: 'PUT',
+                headers: obterHeaders(),
+                body: JSON.stringify({ novoEstoque: parseInt(novoEstoque) })
+            });
+
+            const resultado = await resposta.json();
+            if (resposta.ok) {
+                alert(resultado.mensagem);
+                carregarEstoque();
+            } else {
+                alert(`Erro ${resposta.status}: ${resultado.erro}`);
+                carregarEstoque();
+            }
+        }
+
+        async function deletarCliente(idCliente) {
+            const resposta = await fetch(`/api/clientes/${idCliente}`, {
+                method: 'DELETE',
+                headers: obterHeaders()
+            });
+
+            const resultado = await resposta.json();
+            if (resposta.ok) {
+                alert(resultado.mensagem);
+                carregarClientes();
+            } else {
+                alert(`Erro ${resposta.status}: ${resultado.erro}`);
+            }
+        }
+
+        carregarVendas();
+        carregarEstoque();
+        carregarClientes();
+    </script>
+</body>
+</html>
