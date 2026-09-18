@@ -145,3 +145,22 @@ app.delete('/api/clientes/:id', verificarAcesso('Admin'), async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor TechShop rodando em http://localhost:${PORT}`);
 });
+import express from 'express';
+import mongoose from 'mongoose';
+
+constapp = express();
+app.use(express.json());
+
+// Utilize a variável de ambiente para a URI do MongoDB
+const MONGO_URI = process.env.MONGO_URI;
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ Conectado ao MongoDB Atlas'))
+  .catch((err) => console.error('❌ Erro ao conectar no MongoDB:', err));
+
+// Defina as suas rotas normalmente
+app.get('/', (req, res) => res.send('API Techshop a funcionar!'));
+
+// Exportação necessária para o Vercel
+export default app;
+module.exports = app;
